@@ -7,9 +7,9 @@ import re
 import os
 from tabulate import tabulate
 
-from constant import NEXT_RECALL, NEXT_RECALL_STR
+from constant import DAY, HOUR, NEXT_RECALL, NEXT_RECALL_STR, VIEW_RANGE
 from stdout import bcolors, print_err, print_ok, print_warning
-from util import cmp_date, datetime_after_now, datetime_now
+from util import cmp_date, datetime_after_now, datetime_dff, datetime_now
 
 clear = lambda: os.system('clear')
 new_df = False
@@ -18,8 +18,11 @@ class InputHandler:
     def __init__(self, df: pd.DataFrame):
         self.state = ""
         self.cur_input = ""
-        self.df = df.sort_values(["nxt_rvw_ts"])
-        self.df = df.set_index("word")
+        self.cur_word = ""
+        self.df = df
+        self._update_nxt_rvw_ts_diff()
+        self.df = self.df.set_index("word")
+        self._save_df()
         self.cur_q_idx = 0
         self.state_cand = {"review", "learn", "update", "delete"}
         self.state_map = {"r": "review", "l": "learn", "u": "update", "d": "delete"}
@@ -42,12 +45,19 @@ class InputHandler:
         if cmd in self.state_map:
             cmd = self.state_map[cmd]
         if self.cur_input.startswith(":") and cmd in self.state_cand:
+            if cmd == "update":
+                self.switch_to_update = self.state != ""
             self.state=cmd
             return True
         return False
     
     def next_question(self):
         return self.questions[self.state][self.cur_q_idx]
+
+    def _update_nxt_rvw_ts_diff(self):
+        self.df["next_rvw_ts_diff"] = self.df["nxt_rvw_ts"].map(lambda x: datetime_dff(datetime_now(), x))
+        self.df["next_rvw_ts_diff_abs"] = self.df["nxt_rvw_ts"].map(lambda x: abs(datetime_dff(datetime_now(), x)))
+        self.df = self.df.sort_values(["next_rvw_ts_diff_abs"])
 
     def _print_nxt_rvw_time(self, next_recall):
         self.print_with_mode(f"3: next recall after {bcolors.OKGREEN}{NEXT_RECALL_STR[int(min(max(next_recall.nxt_rvw_prd_idx + 1, 3), len(NEXT_RECALL) - 1))]}{bcolors.ENDC}")
@@ -96,7 +106,8 @@ class InputHandler:
 
 
     def _add_new_row(self, row: pd.Series):
-        self.df = pd.concat([row.to_frame().T, self.df]).sort_values("nxt_rvw_ts")
+        self.df = pd.concat([row.to_frame().T, self.df])
+        self._update_nxt_rvw_ts_diff()
 
     def _save_df(self, new=new_df):
         new_df_path = "gre_vocab.csv"
@@ -108,13 +119,17 @@ class InputHandler:
         while(True):
             clear()
             try:
-                next_recall: pd.Series = self.df.iloc[0]
-                if not cmp_date(datetime_now(), next_recall.nxt_rvw_ts):
+                review_df = self.df[self.df.next_rvw_ts_diff >= 0]
+                bool_view = review_df.lst_rvw_ts.map(lambda x: cmp_date(x, datetime_after_now(-VIEW_RANGE)))
+                review_df = review_df[bool_view]
+                if not review_df.shape[0]:
                     print_warning("Running out of reviewable vocabs, switching to LEARN mode....")
                     self.state = "learn"
                     self.switch_to_learn = True
                     self.cur_input = ""
                     break
+                next_recall: pd.Series = review_df.iloc[0]
+                self.cur_word = next_recall.name
                 self._show_vocab_by_command(":s", next_recall)
                 self.cur_input = ""
                 os.system(f"say '{next_recall.name}' &") 
@@ -124,11 +139,26 @@ class InputHandler:
                     self.cur_input = input()
                     if self.cur_input in {"0", "1", "2", "3"}:
                         break
-                    self._show_vocab_by_command(self.cur_input, next_recall)
-                    if self.try_switch_state():
-                        return False
+                    if self.cur_input and self.cur_input[0] == "s":
+                        self._show_vocab_by_command(self.cur_input, next_recall)
+                    elif self.cur_input and self.cur_input[0] == "l" or self.cur_input=="left":
+                        # remain
+                        # review_left = self.df[self.df.nxt_rvw_ts <= datetime_now()]
+                        print(f"{bcolors.OKGREEN}{review_df['nxt_rvw_ts']}{bcolors.ENDC}")
+                    elif self.cur_input and self.cur_input[0] == "f" or self.cur_input=="finished":
+                        # remain
+                        try:
+                            last_secs = -int(self.cur_input.split()[1]) * HOUR
+                        except:
+                            last_secs = -DAY
+                        review_finished = self.df[self.df.lst_rvw_ts.map(lambda x: cmp_date(x, datetime_after_now(last_secs)))]
+                        print(f"{bcolors.OKGREEN}{review_finished['lst_rvw_ts']}{bcolors.ENDC}")
+                    elif self.try_switch_state():
+                        return True
+                    else:
+                        print_warning("Invalid input")
                 next_recall = self._update_recall_item(next_recall.copy())
-                self.df.drop(self.df.index[0], inplace=True)
+                self.df.drop(next_recall.name, inplace=True)
                 self._add_new_row(next_recall)
                 self._save_df()
             except KeyboardInterrupt:
@@ -137,7 +167,7 @@ class InputHandler:
 
     def _learn_mode(self):
         self.switch_to_learn = False
-        self.print_with_mode(f"What's the new word? (pre: {sorted(self.df.index)[-1]})")
+        self.print_with_mode(f"What's the new word? (pre: {self.df.sort_values(['lst_rvw_ts']).index[-1]})")
         self.cur_input = input()
         if self.cur_input in self.df.index:
             print_warning(f"{self.cur_input} already exists")
@@ -146,6 +176,7 @@ class InputHandler:
             return
         new_word = {}
         word = self.cur_input
+        self.cur_word = word
         while(True):
             try:
                 os.system(f"say '{word}' &") 
@@ -186,8 +217,8 @@ class InputHandler:
     def _update_mode(self):
         self.print_with_mode("Which word would you like to update?")
         if not self.switch_to_update:
-            self.cur_input = input()
-        word = self.cur_input
+            self.cur_input = self.cur_word = input()
+        word = self.cur_word
         try:
             row = self.df.loc[word]
             self.df.drop(word, inplace=True)
@@ -201,6 +232,7 @@ class InputHandler:
                 self.cur_input = input(f"How would you like to update {bcolors.OKGREEN}{word}{bcolors.ENDC}?\n")
                 clear()
                 if self.cur_input == ":s":
+                    self.state = "review"
                     break
                 if self.cur_input[1] not in self.col_map:
                     print_warning("Invalid attribute. Please try again")
@@ -216,6 +248,7 @@ class InputHandler:
             except KeyboardInterrupt:
                 self.state = ""
                 return
+        new_word_ps = pd.Series(new_word, name=word)
         self._add_new_row(new_word_ps)
         self._save_df()
 
@@ -224,7 +257,7 @@ class InputHandler:
             try:
                 self.print_with_mode("Which word would you like to delete?")
                 self.cur_input = input()
-                word = self.cur_input
+                self.cur_word = word = self.cur_input
                 if word not in self.df.index:
                     print_warning(f"{word} does not exist, please try again")
                     continue
@@ -246,7 +279,8 @@ class InputHandler:
         elif self.state.startswith("r") or self.state.startswith("l"):
             # review mode
             if not self.switch_to_learn:
-                self._review_mode()
+                if self._review_mode():
+                    return
             return self._learn_mode()
         elif self.state.startswith("u"):
             return self._update_mode()
