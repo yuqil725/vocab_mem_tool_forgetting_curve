@@ -61,7 +61,9 @@ To check the meaning of the word, use `s` command.
 | ss      | show synonym     |
 | sa      | show antonym     |
 
-To show the remaning review words, use `l` command
+To show the remaning reviewing words, use `l` command.
+
+To show the finished reviewing words within today, use `f` command. You can also add time attribute. For example, `f 20000` mean "show finished reviewing words in the last 20000 seconds".
 
 # Constant
 
