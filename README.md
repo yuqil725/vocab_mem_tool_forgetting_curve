@@ -39,6 +39,8 @@ The commands are:
 
 If no commands are provided, your input will be filled in column following the top-down order in the table.
 
+A word can be saved any time by `:s` command.
+
 ## Update Mode
 
 When switching to update mode, you are required to choose an word to update. The update command is identical to the one showing in learning mode.
