@@ -34,6 +34,7 @@ class InputHandler:
             "r": ["to_remember"],
             "s": ["synonym"],
             "a": ["antonym"],
+            "n": ["nxt_rvw_prd_idx"],
             "sall": ["meaning", "to_remember", "example", "synonym", "antonym"]
         }
     
@@ -173,6 +174,7 @@ class InputHandler:
             print_warning(f"{self.cur_input} already exists")
             self.state = "update"
             self.switch_to_update = True
+            self.cur_word = self.cur_input
             return
         new_word = {}
         word = self.cur_input
@@ -243,6 +245,8 @@ class InputHandler:
                     continue
                 text = " ".join(self.cur_input.split()[1:])
                 new_word[column[0]] = text
+                if column == ["nxt_rvw_prd_idx"]:
+                    new_word["nxt_rvw_ts"] = datetime_after_now(NEXT_RECALL[int(text)])
                 new_word_ps = pd.Series(new_word, name=word)
                 print_ok(tabulate(new_word_ps.to_frame(), headers='keys'))
             except KeyboardInterrupt:
