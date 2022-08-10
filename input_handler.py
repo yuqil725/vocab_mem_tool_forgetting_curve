@@ -35,7 +35,7 @@ class InputHandler:
             "s": ["synonym"],
             "a": ["antonym"],
             "n": ["nxt_rvw_prd_idx"],
-            "sall": ["meaning", "to_remember", "example", "synonym", "antonym"]
+            "sall": ["meaning", "to_remember", "example", "synonym", "antonym", "rvw_his_ts"]
         }
     
     def print_with_mode(self, s):
@@ -80,6 +80,10 @@ class InputHandler:
                 self.print_with_mode(f"Unknown command: {self.cur_input}")
         next_recall.lst_rvw_ts = datetime_now()
         next_recall.nxt_rvw_ts = datetime_after_now(NEXT_RECALL[next_recall.nxt_rvw_prd_idx])
+        if "rvw_his_ts" in next_recall and type(next_recall["rvw_his_ts"]) == str:
+            next_recall["rvw_his_ts"] += ", " + next_recall.lst_rvw_ts
+        else:
+            next_recall["rvw_his_ts"] = next_recall.lst_rvw_ts
         self.print_with_mode(f"Your next recall time will be after {bcolors.OKGREEN}{NEXT_RECALL_STR[next_recall.nxt_rvw_prd_idx]}{bcolors.ENDC}")
         return next_recall
 
@@ -212,6 +216,7 @@ class InputHandler:
         new_word["nxt_rvw_prd_idx"] = 1
         new_word["lst_rvw_ts"] = datetime_now()
         new_word["nxt_rvw_ts"] = datetime_after_now(NEXT_RECALL[0])
+        new_word["rvw_his_ts"] = new_word["lst_rvw_ts"]
         new_word_ps = pd.Series(new_word, name=word)
         self._add_new_row(new_word_ps)
         self._save_df()
@@ -246,6 +251,7 @@ class InputHandler:
                 text = " ".join(self.cur_input.split()[1:])
                 new_word[column[0]] = text
                 if column == ["nxt_rvw_prd_idx"]:
+                    new_word[column[0]] = int(text)
                     new_word["nxt_rvw_ts"] = datetime_after_now(NEXT_RECALL[int(text)])
                 new_word_ps = pd.Series(new_word, name=word)
                 print_ok(tabulate(new_word_ps.to_frame(), headers='keys'))
