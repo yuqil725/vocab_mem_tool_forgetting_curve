@@ -188,7 +188,7 @@ class InputHandler:
                 os.system(f"say '{word}' &") 
                 self.cur_input = input(f"What attribute would you like to add to {bcolors.OKGREEN}{word}{bcolors.ENDC}?\n")
                 clear()
-                if self.cur_input == ":s":
+                if self.cur_input.lower() == ":s":
                     break
                 if self.cur_input[0] not in {"+", "-"}:
                     for c in self.col_map["sall"]:
@@ -236,12 +236,13 @@ class InputHandler:
         new_word = row.to_dict()
         while(True):
             try:
+                os.system(f"say '{word}' &") 
                 self.cur_input = input(f"How would you like to update {bcolors.OKGREEN}{word}{bcolors.ENDC}?\n")
                 clear()
-                if self.cur_input == ":s":
+                if self.cur_input.lower() == ":s":
                     self.state = "review"
                     break
-                if self.cur_input[1] not in self.col_map:
+                if not self.cur_input or self.cur_input[1] not in self.col_map:
                     print_warning("Invalid attribute. Please try again")
                     continue
                 column = self.col_map[self.cur_input[1]]
