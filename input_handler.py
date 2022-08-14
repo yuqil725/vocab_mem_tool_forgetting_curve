@@ -190,18 +190,18 @@ class InputHandler:
                 clear()
                 if self.cur_input.lower() == ":s":
                     break
-                if self.cur_input[0] not in {"+", "-"}:
+                if self.cur_input and self.cur_input[0] not in {"+", "-"}:
                     for c in self.col_map["sall"]:
                         if c not in new_word:
                             column = [c]
                             break
                     text = self.cur_input
-                elif self.cur_input[0] == "-":
+                elif self.cur_input and self.cur_input[0] == "-":
                     column = self.col_map[self.cur_input[1]]
                     del new_word[column[0]]
                     continue
                 else:
-                    if self.cur_input[1] not in self.col_map:
+                    if self.cur_input and self.cur_input[1] not in self.col_map:
                         print_warning("Invalid attribute. Please try again")
                     else:
                         column = self.col_map[self.cur_input[1]]
@@ -255,6 +255,7 @@ class InputHandler:
                     new_word[column[0]] = int(text)
                     new_word["nxt_rvw_ts"] = datetime_after_now(NEXT_RECALL[int(text)])
                 new_word_ps = pd.Series(new_word, name=word)
+                new_word_ps["lst_rvw_ts"] = datetime_now()
                 print_ok(tabulate(new_word_ps.to_frame(), headers='keys'))
             except KeyboardInterrupt:
                 self.state = ""
